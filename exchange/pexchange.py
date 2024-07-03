@@ -16,6 +16,7 @@ import pendulum
 import time
 from devtools import debug
 from loguru import logger
+from .bingx import Bingx
 
 
 from .model import CRYPTO_EXCHANGES, STOCK_EXCHANGES, MarketOrder
@@ -27,6 +28,7 @@ class Exchange(BaseModel):
     BYBIT: Bybit | None = None
     BITGET: Bitget | None = None
     OKX: Okx | None = None
+    BINGX: Bingx | None = None
     KIS1: KoreaInvestment | None = None
     KIS2: KoreaInvestment | None = None
     KIS3: KoreaInvestment | None = None
@@ -76,10 +78,10 @@ def get_exchange(exchange_name: str, kis_number=None):
 
 def get_bot(
     exchange_name: Literal[
-        "BINANCE", "UPBIT", "BYBIT", "BITGET", "KRX", "NASDAQ", "NYSE", "AMEX", "OKX"
+        "BINANCE", "UPBIT", "BYBIT", "BITGET", "KRX", "NASDAQ", "NYSE", "AMEX", "OKX", "BINGX"
     ],
     kis_number=None,
-) -> Binance | Upbit | Bybit | Bitget | KoreaInvestment | Okx:
+) -> Binance | Upbit | Bybit | Bitget | KoreaInvestment | Bingx:
     exchange_name = exchange_name.upper()
     if exchange_name in CRYPTO_EXCHANGES:
         return get_exchange(exchange_name, kis_number).dict()[exchange_name]
@@ -253,6 +255,23 @@ def retry(
                                 params |= {"tdMode": "isolated"}
                             else:
                                 params |= {"tdMode": order_info.margin_mode}
+
+                        args = tuple(
+                            params if i == 5 else arg for i, arg in enumerate(args)
+                        )
+                    else:
+                        attempts = max_attempts
+                elif order_info.exchange in ("BINGX"):
+                    if "position mode not match" in str(e):
+                        if instance.position_mode == "one-way":
+                            instance.position_mode = "hedge"
+                            params = {}
+                        elif instance.position_mode == "hedge":
+                            instance.position_mode = "one-way"
+                            if order_info.is_entry:
+                                params = {}
+                            elif order_info.is_close:
+                                params = {"reduceOnly": True}
 
                         args = tuple(
                             params if i == 5 else arg for i, arg in enumerate(args)
